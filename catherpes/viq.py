@@ -1,727 +1,761 @@
-package Arty::vIQ;
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Created on Tue Apr 26 21:05:28 UTC 2022
 
-use strict;
-use warnings;
-use vars qw($VERSION);
+Synopsis:
+
+viq.py viq_output.txt
 
-$VERSION = 0.0.1;
-use base qw(Arty::Base);
-use Arty::Utils qw(:all);
-use File::ReadBackwards;
-
-=head1 NAME
-
-Arty::vIQ - Parse vIQ files
-
-=head1 VERSION
-
-This document describes Arty::vIQ version 0.0.1
-
-=head1 SYNOPSIS
-
-    use Arty::vIQ;
-    my $viq = Arty::vIQ->new('sample.viq_output.txt');
-
-    while (my $record = $parser->next_record) {
-        print $record->{gene} . "\n";
-    }
-
-=head1 DESCRIPTION
-
-L<Arty::vIQ> provides vIQ parsing ability for the Artemisia suite
-of genomics tools.
-
-=head1 DATA STRUCTURE
-
-Arty::vIQ returns records as a complex datastructure which has the
-following format.
-
-=head1 CONSTRUCTOR
-
-New L<Arty::vIQ> objects are created by the class method new.
-Arguments should be passed to the constructor as a list (or reference)
-of key value pairs.  If the argument list has only a single argument,
-then this argument is applied to the 'file' attribute and thus
-specifies the vIQ filename.  All attributes of the L<Arty::vIQ>
-object can be set in the call to new. An simple example of object
-creation would look like this:
-
-    my $parser = Arty::vIQ->new('sample.viq_output.txt');
-
-    # This is the same as above
-    my $parser = Arty::vIQ->new('file' => 'sample.viq_output.txt');
-
-The constructor recognizes the following parameters which will set the
-appropriate attributes:
-
-=over
-
-=item * C<< file => sample.viq_output.txt >>
-
-This optional parameter provides the filename for the file containing
-the data to be parsed. While this parameter is optional either it, or
-the following fh parameter must be set.
-
-=item * C<< fh => $fh >>
-
-This optional parameter provides a filehandle to read data from. While
-this parameter is optional either it, or the previous file parameter
-must be set.
-
-=back
-
-=cut
-
-#-----------------------------------------------------------------------------
-#-------------------------------- Constructor --------------------------------
-#-----------------------------------------------------------------------------
-
-=head2 new
-
-     Title   : new
-     Usage   : Arty::vIQ->new();
-     Function: Creates a Arty::vIQ object;
-     Returns : An Arty::vIQ object
-     Args    :
-
-=cut
-
-sub new {
-        my ($class, @args) = @_;
-        my $self = $class->SUPER::new(@args);
-        $self->_process_header;
-        return $self;
-}
-
-#-----------------------------------------------------------------------------
-#----------------------------- Private Methods -------------------------------
-#-----------------------------------------------------------------------------
-
-=head1 PRIVATE METHODS
-
-=head2 _initialize_args
-
- Title   : _initialize_args
- Usage   : $self->_initialize_args($args);
- Function: Initialize the arguments passed to the constructor.  In particular
-           set all attributes passed.  For most classes you will just need to
-           customize the @valid_attributes array within this method as you add
-           Get/Set methods for each attribute.
- Returns : N/A
- Args    : A hash or array reference of arguments.
-
-=cut
-
-sub _initialize_args {
-        my ($self, @args) = @_;
-
-        ######################################################################
-        # This block of code handels class attributes.  Use the
-        # @valid_attributes below to define the valid attributes for
-        # this class.  You must have identically named get/set methods
-        # for each attribute.  Leave the rest of this block alone!
-        ######################################################################
-        my $args = $self->SUPER::_initialize_args(@args);
-        # Set valid class attributes here
-        my @valid_attributes = qw();
-        $self->set_attributes($args, @valid_attributes);
-        ######################################################################
-        return $args;
-}
-
-#-----------------------------------------------------------------------------
-
-=head2 _process_header
-
-  Title   : _process_header
-  Usage   : $self->_process_header
-  Function: Parse and store header data
-  Returns : N/A
-  Args    : N/A
-
-=cut
-
- sub _process_header {
-     my $self = shift @_;
-
-     my $file = $self->file;
-
-     my $fh = File::ReadBackwards->new($file) ||
-         throw_msg('cant_open_file_for_reading', $file);
-
-     my %footer;
-   LINE:
-     while (my $line = $fh->readline) {
-         return undef if ! defined $line;
-         if ($line !~ /^\#A/) {
-             chomp $line;
-
-	     ##------------------------------------------------------------------------------
-	     ##------------------------ POSSIBLE MENDELIAN DIAGNOSES ------------------------
-	     ##------------------------------------------------------------------------------
-	     ## RANK  MIM     GENE     PHEV_GENE PHEV_MIM  MIM_MPR IMPRM   vIQscr  mIQscr  INC  DISEASE
-	     #B 0     118450  JAG1     0.957     0.992     0.987   0.5     1.126   1.545   N    AWS
-	     #B 1     618786  SUZ12    0.952     0.904     0.9     0.5     1.21    0.945   N    Imagawa-Matsumoto syndrome
-	     #B 2     617140  SON      0.953     0.979     0.975   0.5     -0.445  0.212   N    ZTTK SYNDROME
-	     #B 3     617159  CHD4     0.878     0.836     0.832   0.5     0.225   0.055   N    SIFRIM-HITZ-WEISS SYNDROME
-	     ##------------------------------------------------------------------------------
-	     ##------------------------ POSSIBLE MULTIGENIC DIAGNOSES -----------------------
-	     ##------------------------------------------------------------------------------
-	     ##  RANK  MIM     VID              NUM_G  TYPE  ZYG  CSQS  PLOIDY  PHEV_GENE  PHEV_MIM  MIM_MPR vIQscr  mIQscr  INC  CHR
-	     #C  0     113100  BadgeGrp37362.2  2      4     1    1     1       0.925      0.662     0.66    -1.291  -1.319  N    20
-	     #C  1     NO_MIM  BadgeGrp7940.2   2      4     1    1     1       0.247      0.012     0.002   -1.612  -3.12   Y    16
-	     #C  2     NO_MIM  BadgeGrp6437.2   2      4     1    1     1       0.297      0.001     0.002   -1.722  -3.199  Y    2
-	     #C  3     NO_MIM  BadgeGrp2507.3   3      6     1    8     3       0.264      0         0.002   -1.968  -3.375  Y    7
-	     ##------------------------------------------------------------------------------
-	     ##------------------------------------ HPO -------------------------------------
-	     ##------------------------------------------------------------------------------
-	     ##      0       HP:0011121      1
-	     ##      1       HP:0001999      1
-	     ##      2       HP:0001657      1
-	     ##      3       HP:0000152      1
-	     ##------------------------------------------------------------------------------
-	     ## GENOTYPE SKEW CHECK. P_value alpha = 0.00217391 based upon 90 previous observations.
-	     ## CHR  	NUM_HET 	NUM_HOM 	%HOM_OBS	%HOM_EXP	P_VALUE      	 het <- SKEW -> hom
-	     ## 1    	989     	475     	0.307122	0.274696	0.107468	          |
-	     ## 10   	279     	172     	0.307092	0.291090	0.317974	          |
-	     ## 11   	460     	360     	0.361816	0.301593	0.103433	          |
-	     ## 12   	397     	256     	0.258878	0.303959	0.089466	          |
-	     ## 13   	154     	83      	0.223900	0.263517	0.209185	          |
-	     ## 14   	221     	136     	0.257753	0.303610	0.190588	          |
-	     ## 15   	269     	148     	0.242351	0.311576	0.071857	          |
-	     ## 16   	245     	174     	0.383414	0.260717	0.000274	          |+++
-	     ## 17   	451     	273     	0.268743	0.297246	0.197559	          |
-	     ## 18   	101     	96      	0.381859	0.293539	0.043265	          |
-	     ## 19   	672     	386     	0.287421	0.292273	0.439947	          |
-	     ## 2    	511     	320     	0.327274	0.293646	0.116324	          |
-	     ## 20   	212     	89      	0.233125	0.289368	0.104478	          |
-	     ## 21   	134     	43      	0.137459	0.288819	0.003829	          |
-	     ## 22   	171     	93      	0.260173	0.306226	0.184831	          |
-	     ## 3    	407     	255     	0.283468	0.297334	0.353994	          |
-	     ## 4    	277     	232     	0.444243	0.307158	0.000250	          |+++
-	     ## 5    	310     	225     	0.349154	0.303541	0.128416	          |
-	     ## 6    	644     	323     	0.254281	0.281636	0.317448	          |
-	     ## 7    	433     	173     	0.199651	0.280076	0.019431	          |
-	     ## 8    	227     	152     	0.290023	0.295137	0.446953	          |
-	     ## 9    	263     	184     	0.295424	0.292450	0.468794	          |
-	     ## X    	20      	126     	0.872348	0.647167	0.223214	          |
-	     ##
-	     ## LOH DETECTED:YES
-	     ## SKEW DETECTED:YES (7.16236527310748)
-	     ## Estimated Consanguinity:4.49%
-	     ## CSN PRIOR:0.522450468914974
-	     ## VARIANTS_IN:13088 NUMBER OF SVs (rows):1 PASSING_FILTERS:1585 p_obs:0.499999999999997
-	     ## Ext. SVs in file:0
-	     ## Ext. SVs in kept:0
-	     ## Badges considered:29788
-	     ## Badges kept:94
-	     ## Badges deleted:0
-	     ## Proband Ancestry:Other	Relative -Log Likelihoods:	Other:8917,Asian:9761,Finish:9891,European(non-Finish):10013,Ashkenazi:10049,African:11255
-	     ## Proband Sex:m P(MALE):0.999620371976135
-	     ## NUM HPO TERMS:133
-	     ## ADJ FOR INBREEDING:0.553521316925857
-	     ## MODE:TRIO
-	     ## Number of variants failing -e m  a:cov:47,bias:102,tot:143
-	     ## VAAST-VVP COOR:0.53
-	     ## BLS-BND COOR:0
-	     ## BLS-NOA COOR:0
-	     ## PHEV-KPR COOR:0.72
-	     ## CLIN-VVP-VAAST:-1
-	     ## COVERAGE-HETEROZYGOSITY COOR:0.05
-	     ## PHEV-GENE-MIM COOR:0.75
-	     ## K_PRIOR:0.87084
-	     ## K_PRIOR_PROB:0.24248417721519
-	     ## U_PRIOR_PROB:0.0454545454545455
-	     ## AVE DEPTH OF COVERAGE a MEAN:51.7116350985698 VARIANCE:321.153472460763
-	     ## AVE DEPTH OF COVERAGE m MEAN:1 VARIANCE:1
-	     ## AVE DEPTH OF COVERAGE x MEAN:28.09375 VARIANCE:166.990927419355
-	     ## AVE DEPTH OF COVERAGE y MEAN:1 VARIANCE:1
-	     ## CLIN PRIORS
-	     ##      3       0.00611580127827239
-	     ##      2       0.0100230045159044
-	     ##      1       0.0591715083998015
-	     ##...
-	     ## CSQS
-	     ##	12	0.000391706187985203
-	     ##	2,18,23	0.000391706187985203
-	     ##	5,13	0.000391706187985203
-	     ##...
-	     ##
-	     ## TYPE FRQUENCIES:	1:0.782534246575342	2:0.0804794520547945	4:0.0479452054794521	6:0.0684931506849315	8:0.0205479452054795	SUM:584
-	     ## TFA (INDEL) ADJUSTMENT	STATUS:off	TFA:0.46003933494999	Pval:0.149636422086162
-	     ## LOW QUALITY LIST FILE DETECTED:NO. Frac Vars w/out reads:0
-	     ## NULL READ COUNT ADJ. With:1 Without:1
-	     ## CMD:/home/ubuntu/vIQ6/bin/vIQ2 -a /home/ubuntu/fabric_viq_workflow/snakemake/rady_benchmarks/viq6.config -c  -d  -T WGS -e m -f 0.005 -g  -h  -i  -k  -l VIQ/coding_dist.CT.204560.viq_list.txt -m t -M Phevor/phv_renorm_mim.CT.204560.txt -o  -p 0.5 -Q h -q n -r n -s Phevor/phv_renorm.CT.204560.txt -v  -w  -x  -y  -z
-	     ## Threshold for SV support (BFT):0.698970004336019
-	     ## K:5.66946220417446
-	     ## VERSION:6.1.2d
-	     ## GMT:Tue Sep  1 19:04:47 2020
-	     ## EOF
-
-	     ##------------------------------------------------------------------------------
-	     ##------------------------ POSSIBLE MENDELIAN DIAGNOSES ------------------------
-	     ##------------------------------------------------------------------------------
-	     ## RANK  MIM     GENE     PHEV_GENE PHEV_MIM  MIM_MPR IMPRM   vIQscr  mIQscr  INC  DISEASE
-	     #B 0     118450  JAG1     0.957     0.992     0.987   0.5     1.126   1.545   N    AWS
-	     #B 1     618786  SUZ12    0.952     0.904     0.9     0.5     1.21    0.945   N    Imagawa-Matsumoto syndrome
-	     #B 2     617140  SON      0.953     0.979     0.975   0.5     -0.445  0.212   N    ZTTK SYNDROME
-	     #B 3     617159  CHD4     0.878     0.836     0.832   0.5     0.225   0.055   N    SIFRIM-HITZ-WEISS SYNDROME
-             if ($line =~ s/^\#B\s+//) {
-		 my %data;
-		 @data{qw(rank mim gene phev_gene phev_mim mim_mpr
-			  excm viqscr miqscr inc disease)} =
-		     split /\t/, $line;
-		 map {$_ =~ s/\s+$//} values %data;
-		 push @{$self->{mendelian_diagnoses}}, \%data;
-             }
-	     ##------------------------------------------------------------------------------
-	     ##------------------------ POSSIBLE MULTIGENIC DIAGNOSES -----------------------
-	     ##------------------------------------------------------------------------------
-	     ##  RANK  MIM     VID              NUM_G  TYPE  ZYG  CSQS  PLOIDY  PHEV_GENE  PHEV_MIM  MIM_MPR vIQscr  mIQscr  INC  CHR
-	     #C  0     113100  BadgeGrp37362.2  2      4     1    1     1       0.925      0.662     0.66    -1.291  -1.319  N    20
-	     #C  1     NO_MIM  BadgeGrp7940.2   2      4     1    1     1       0.247      0.012     0.002   -1.612  -3.12   Y    16
-	     #C  2     NO_MIM  BadgeGrp6437.2   2      4     1    1     1       0.297      0.001     0.002   -1.722  -3.199  Y    2
-	     #C  3     NO_MIM  BadgeGrp2507.3   3      6     1    8     3       0.264      0         0.002   -1.968  -3.375  Y    7
-             elsif ($line =~ s/^\#C\s+//) {
-		 my %data;
-		 @data{qw(rank mim vid num_g type zyg csqs ploidy
-			  phev_gene phev_mim mim_mpr viqscr miqscr inc chr)} =
-		     split /\t/, $line;
-		 map {$_ =~ s/\s+$//} values %data;
-		 push @{$self->{multigenic_diagnoses}}, \%data;
-             }
-	     ##------------------------------------------------------------------------------
-	     ##------------------------------------ HPO -------------------------------------
-	     ##------------------------------------------------------------------------------
-	     ##      0       HP:0011121      1
-	     ##      1       HP:0001999      1
-	     ##      2       HP:0001657      1
-	     ##      3       HP:0000152      1
-             elsif ($line =~ /^\#\#\s+(\d+)\s+(HP:\d+)\s+(\d+)/) {
-                 push @{$self->{hpo}}, $2;
-             }
-	     ## GENOTYPE SKEW CHECK. P_value alpha = 0.00217391 based upon 90 previous observations.
-             elsif ($line =~ /^\#\#\s+GENOTYPE SKEW CHECK/) {
-                 ($self->{skew_pval_alpha}) = ($line =~ /P_value\s+alpha\s+=\s+(\S+)\s+/);
-             }
-	     elsif ($line =~ /^\#\#\s+X\s+/) {
-		 # Skipping 'CLIN PRIORS' and 'CSQS' values for now.
-	     }
-
-	     ## Ext. SVs in kept:1
-	     ## CHR    NUM_HET         NUM_HOM         %HOM_OBS        %HOM_EXP        P_VALUE          het <- SKEW -> hom
-	     ##        RANK    MIM     VID                     NUM_G   TYPE    ZYG     CSQS    PLOIDY  PHEV_GENE       PHEV_MIM        MIM_MPR vIQscr  mIQscr  INC     C
-
-
-
-	     ## LOH DETECTED:NO
-             elsif ($line =~ /^\#\#\s+LOH DETECTED:\s*(.*)/) {
-                 $self->{loh_detected} = $1;
-             }
-	     ## SKEW DETECTED:NO (0)
-             elsif ($line =~ /^\#\#\s+SKEW DETECTED:\s*(\S+)\s+\(.*?\)/) {
-                 $self->{skew_detected} = $1;
-                 $self->{skew_detected_score} = $2;
-             }
-	     ## Estimated Consanguinity:6.84%
-             elsif ($line =~ /^\#\#\s+Estimated Consanguinity:\s*(.*)%/) {
-                 $self->{estimated_consanguinity} = $1;
-             }
-	     ## CSN PRIOR:0.522450468914974
-             elsif ($line =~ /^\#\#\s+CSN PRIOR:\s*(.*)/) {
-                 $self->{csn_prior} = $1;
-             }
-	     ## VARIANTS_IN:13088 NUMBER OF SVs (rows):1 PASSING_FILTERS:1585 p_obs:0.499999999999997
-             elsif ($line =~ /^\#\#\s+VARIANTS_IN:\s*(\d+)\s+NUMBER OF SVs\s+\(rows\):(\d+)\s+PASSING_FILTERS:(\d+)\s+p_obs:(.*)/) {
-                 $self->{variants_in}     = $1;
-		 $self->{number_of_svs}   = $2;
-		 $self->{passing_filters} = $3;
-		 $self->{p_obs}           = $4;
-             }
-	     ## Ext. SVs in file:0
-             elsif ($line =~ /^\#\#\s+Ext. SVs in file:\s*(.*)/) {
-                 $self->{ext_svs_file} = $1;
-             }
-	     ## Ext. SVs in kept:0
-             elsif ($line =~ /^\#\#\s+Ext.\s+SVs\s+in\s+kept:\s*(.*)/) {
-                 $self->{ext_svs_kept} = $1;
-             }
-	     ## Badges considered:29788
-             elsif ($line =~ /^\#\#\s+Badges considered:\s*(.*)/) {
-                 $self->{badges_considered} = $1;
-             }
-	     ## Badges kept:94
-             elsif ($line =~ /^\#\#\s+Badges kept:\s*(.*)/) {
-                 $self->{badges_kept} = $1;
-             }
-	     ## Badges deleted:0
-             elsif ($line =~ /^\#\#\s+Badges deleted:\s*(.*)/) {
-                 $self->{badges_deleted} = $1;
-             }
-	     ## Proband Ancestry:European(non-Finish)	Relative -Log Likelihoods:	European(non-Finish):9513,Finish:9549,Ashkenazi:9702,Other:9810,Asian:10878,African:11622
-             elsif ($line =~ /^\#\#\s+Proband Ancestry:\s*(.*)\s+Relative -Log Likelihoods:\s+(.*)/) {
-                 $self->{proband_ancestry} = $1;
-		 $self->{ancestry_relative_log_likelihoods} = $2;
-             }
-	     ## Proband Sex:m P(MALE):0.999620371976135
-	     elsif ($line =~ /^\#\#\s+Proband Sex:\s*(\S+)\s+P\(MALE\):(.*)/) {
-                 $self->{proband_sex} = $1;
-		 $self->{prob_proband_male} = $2
-             }
-	     ## NUM HPO TERMS:133
-             elsif ($line =~ /^\#\#\s+NUM HPO TERMS:\s*(.*)/) {
-                 $self->{num_hpo_terms} = $1;
-             }
-	     ## ADJ FOR INBREEDING:0.553521316925857
-             elsif ($line =~ /^\#\#\s+ADJ FOR INBREEDING:\s*(.*)/) {
-                 $self->{adj_for_inbreeding} = $1;
-             }
-	     ## MODE:TRIO
-             elsif ($line =~ /^\#\#\s+MODE:\s*(.*)/) {
-                 $self->{mode} = $1;
-             }
-	     ## Number of variants failing -e m  a:cov:47,bias:102,tot:143
-             elsif ($line =~ /^\#\#\s+Number\s+of\s+variants\s+failing\s+\-e\s+[mw]\s+(.*)/) {
-                 $self->{num_var_fail_e_m} = $1;
-             }
-	     ## VAAST-VVP COOR:0.53
-             elsif ($line =~ /^\#\#\s+VAAST-VVP COOR:\s*(.*)/) {
-                 $self->{vaast_vvp_coor} = $1;
-             }
-	     ## BLS-BND COOR:0
-             elsif ($line =~ /^\#\#\s+BLS-BND COOR:\s*(.*)/) {
-                 $self->{bls_bnd_coor} = $1;
-             }
-	     ## BLS-NOA COOR:0
-             elsif ($line =~ /^\#\#\s+BLS-NOA COOR:\s*(.*)/) {
-                 $self->{bls_noa_coor} = $1;
-             }
-	     ## PHEV-KPR COOR:0.72
-             elsif ($line =~ /^\#\#\s+PHEV-KPR\s+COOR:\s*(.*)/) {
-                 $self->{phev_kpr_coor} = $1;
-             }
-	     ## CLIN-VVP-VAAST:-1
-             elsif ($line =~ /^\#\#\s+CLIN-VVP-VAAST:\s*(.*)/) {
-                 $self->{clin_vvp_vaast} = $1;
-             }
-	     ## COVERAGE-HETEROZYGOSITY COOR:0.05
-             elsif ($line =~ /^\#\#\s+COVERAGE-HETEROZYGOSITY COOR:\s*(.*)/) {
-                 $self->{coverage_heterozygosity} = $1;
-             }
-	     ## PHEV-GENE-MIM COOR:0.75
-             elsif ($line =~ /^\#\#\s+PHEV-GENE-MIM COOR:\s*(.*)/) {
-                 $self->{phev_gene_mim} = $1;
-             }
-	     ## K_PRIOR:0.87084
-             elsif ($line =~ /^\#\#\s+K_PRIOR:\s*(.*)/) {
-                 $self->{k_prior} = $1;
-             }
-	     ## MIM-GEN SCORES COOR:0.4
-             elsif ($line =~ /^\#\#\s+MIM-GEN SCORES COOR:\s*(.*)/) {
-                 $self->{mim_gen_scores_coor} = $1;
-             }
-	     ## K_PRIOR_PROB:0.24248417721519
-             elsif ($line =~ /^\#\#\s+K_PRIOR_PROB:\s*(.*)/) {
-                 $self->{k_prior_prob} = $1;
-             }
-	     ## U_PRIOR_PROB:0.0454545454545455
-             elsif ($line =~ /^\#\#\s+U_PRIOR_PROB:\s*(.*)/) {
-                 $self->{u_prior_prob} = $1;
-             }
-	     ## AVE DEPTH OF COVERAGE a MEAN:51.7116350985698 VARIANCE:321.153472460763
-             elsif ($line =~ /^\#\#\s+AVE DEPTH OF COVERAGE a MEAN:(.*)\s+VARIANCE:(.*)/) {
-                 $self->{ave_depth_of_coverage_a_mean} = $1;
-                 $self->{ave_depth_of_coverage_a_variance} = $2;
-             }
-	     ## AVE DEPTH OF COVERAGE m MEAN:51.7116350985698 VARIANCE:321.153472460763
-             elsif ($line =~ /^\#\#\s+AVE DEPTH OF COVERAGE m MEAN:(.*)\s+VARIANCE:(.*)/) {
-                 $self->{ave_depth_of_coverage_m_mean} = $1;
-                 $self->{ave_depth_of_coverage_m_variance} = $2;
-             }
-	     ## AVE DEPTH OF COVERAGE x MEAN:51.7116350985698 VARIANCE:321.153472460763
-             elsif ($line =~ /^\#\#\s+AVE DEPTH OF COVERAGE x MEAN:(.*)\s+VARIANCE:(.*)/) {
-                 $self->{ave_depth_of_coverage_x_mean} = $1;
-                 $self->{ave_depth_of_coverage_x_variance} = $2;
-             }
-	     ## AVE DEPTH OF COVERAGE y MEAN:51.7116350985698 VARIANCE:321.153472460763
-             elsif ($line =~ /^\#\#\s+AVE DEPTH OF COVERAGE y MEAN:(.*)\s+VARIANCE:(.*)/) {
-                 $self->{ave_depth_of_coverage_y_mean} = $1;
-                 $self->{ave_depth_of_coverage_y_variance} = $2;
-             }
-	     ## CLIN PRIORS
-	     ##      3       0.00611580127827239
-	     ##      2       0.0100230045159044
-	     ##      1       0.0591715083998015
-             elsif ($line =~ /^\#\#\s+CLIN PRIORS/) {
-		 # Ignoring CLIN PRIORS for now
-             }
-             ## CSQS
-             ## 12      0.000391706187985203
-             ## 2,18,23 0.000391706187985203
-             ## 5,13    0.000391706187985203
-             elsif ($line =~ /^\#\#\s+CSQS/) {
-		 # Ignoring CLIN PRIORS for now
-             }
-	     elsif ($line =~ /^\#\#\s+(\d+)/) {
-		 # Skipping 'CLIN PRIORS' and 'CSQS' values for now.
-	     }
-             ## TYPE FREQUENCIES:        1:0.782534246575342     2:0.0804794520547945    4:0.0479452054794521    6:0.0684931506849315    8:0.0205479452054795   $
-             elsif ($line =~ /^\#\#\s+TYPE\s+FREQUENCIES:\s+(.*)/) {
-		 my @tfs = split /\s+/, $1;
-		 $self->{type_frequencies} = \@tfs;
-             }
-             ## TFA (INDEL) ADJUSTMENT  STATUS:off      TFA:0.46003933494999    Pval:0.149636422086162
-             elsif ($line =~ /^\#\#\s+TFA\s+\(INDEL\)\s+ADJUSTMENT\s+STATUS:\s*(.*)\s+TFA:\s*(.*)\s+Pval:\s*(.*)/) {
-                 $self->{tag} = {'on-off' => $1, 'tfa' => $2, 'pval' => $3};
-             }
-	     ## LOW QUALITY LIST FILE DETECTED:NO. Frac Vars w/out reads:0
-             elsif ($line =~ m|^\#\#\s+LOW QUALITY LIST FILE DETECTED:(.*)\s+Frac Vars w/out reads:\s*(.*)|) {
-                 $self->{low_quality_file} = {'detected' => $1, 'frac_var_no_reads' => $2};
-             }
-	     ## NULL READ COUNT ADJ. With:1 Without:1
-             elsif ($line =~ /^\#\#\s+NULL READ COUNT ADJ. With:\s*(.*) Without:\s*(.*)/) {
-                 $self->{null_read_count} = {'with' => $1, 'without' => $2};
-             }
-             ## CMD:/home/ubuntu/vIQ6/bin/vIQ2 -a /home/ubuntu/fabric_viq_workflow/snakemake/rady_benchmarks/viq6.config -c  -d  -T WGS -e m -f 0.005 -g  -h  -$
-             elsif ($line =~ /^\#\#\s+CMD:\s*(.*)/) {
-                 $self->{cmd} = $1;
-             }
-             ## Threshold for SV support (BFT):0.698970004336019
-             elsif ($line =~ /^\#\#\s+Threshold for SV support \(BFT\):\s*(.*)/) {
-                 $self->{bft} = $1;
-             }
-	     ## K:5.66946220417446
-             elsif ($line =~ /^\#\#\s+K:\s*(.*)/) {
-                 $self->{k} = $1;
-             }
-             ## VERSION:6.1.2d
-             elsif ($line =~ /^\#\#\s+VERSION:\s*(.*)/) {
-                 $self->{version} = $1;
-             }
-             ## GMT:Tue Sep  1 19:04:47 2020
-	     
-             elsif ($line =~ /^\#\#\s+GMT:\s*(.*)/) {
-                 $self->{gmt} = $1;
-             }
-	     ## EOF
-             elsif ($line =~ /^\#\#\s+EOF/) {
-                 $self->{eof}++;
-             }
-	     elsif ($line =~ /##\s+RANK\s+MIM/) {
-		 # Skip column names
-	     }
-	     elsif ($line =~ /##\s+CHR\s+NUM_HET/) {
-		 # Skip column names
-	     }
-	     elsif ($line =~ /^\#\#\s*$/) {
-		 # Skip divider rows
-	     }
-	     elsif ($line =~ /^\#\#\-+/) {
-		 # Skip divider rows
-	     }
-             else {
-		 handle_message('WARN', 'unknown_viq_metadata', $line);
-             }
-         }
-         else {
-             last LINE;
-         }
-     }
-     $self->{footer} = \%footer;
-
-     my $line = $self->readline;
-     if ($line !~ /^\#/) {
-         throw_msg('missing_header_row', "First line: $line\n");
-     }
-     else {
-         my @cols = split /\t/, $line;
-         map {$_ =~ s/\s+$//} @cols;
-         my $col_count = scalar @cols;
-         if ($col_count != 39) {
-             handle_message('FATAL', 'incorrect_column_count', "(expected 39 got $col_count columns) $line");
-         }
-     }
-
-     if (! $self->{eof}) {
-	 throw_msg('missing_end_of_file_mark',
-		   "File $file does not have '## EOF'")
-     }
-}
-
-#-----------------------------------------------------------------------------
-#-------------------------------- Attributes ---------------------------------
-#-----------------------------------------------------------------------------
-
-=head1 ATTRIBUTES
-
-=cut
-
-# =head2 attribute
-#
-#   Title   : attribute
-#   Usage   : $attribute = $self->attribute($attribute_value);
-#   Function: Get/set attribute
-#   Returns : An attribute value
-#   Args    : An attribute value
-#
-# =cut
-#
-#  sub attribute {
-#    my ($self, $attribute_value) = @_;
-#
-#    if ($attribute) {
-#      $self->{attribute} = $attribute;
-#    }
-#
-#    return $self->{attribute};
-#  }
-
-#-----------------------------------------------------------------------------
-#---------------------------------- Methods ----------------------------------
-#-----------------------------------------------------------------------------
-
-=head1 METHODS
-
-=head2 next_record
-
- Title   : next_record
- Usage   : $record = $vcf->next_record();
- Function: Return the next record from the vIQ file.
- Returns : A hash (or reference) of vIQ record data.
- Args    : N/A
-
-=cut
-
-sub next_record {
-    my $self = shift @_;
-
-    my $line = $self->readline;
-    return undef if ! defined $line || $line !~ /^\#A/;
-
-    my $record = $self->parse_record($line);
-
-    return wantarray ? %{$record} : $record;
-}
-
-#-----------------------------------------------------------------------------
-
-=head2 parse_record
-
- Title   : parse_record
- Usage   : $record = $tempalte->parse_record($line);
- Function: Parse vIQ line into a data structure.
- Returns : A hash (or reference) of vIQ record data.
- Args    : A scalar containing a string of Tempalte record text.
-
-=cut
-
-sub parse_record {
-    my ($self, $line) = @_;
-    chomp $line;
-
-    my @cols = split /\t/, $line;
-    map {$_ =~ s/\s+$//;$_ = '' unless defined $_} @cols;
-
-    my $col_count = scalar @cols;
-    if ($col_count != 39) {
-        handle_message('FATAL', 'incorrect_column_count', "(expected 39 got $col_count columns) $line");
-    }
-
-    my %record;
+Description:
+
+This python module is intended to be imported, however it can be
+tested by passing a vIQ output file, in which case it will print the
+#A section formated as TSV to STDOUT.
+
+Positional Arguments:
+
+  file: A vIQ output file.
+
+"""
+
+import sys
+import re
+import json
+import collections
+import pandas as pd
+
+class VIQ():
+
+    gene_keys = ['rank', 'chr', 'gene', 'transcript', 'vid',
+                 'csq', 'dist', 'denovo', 'type', 'zygo', 'csn',
+                 'pldy', 'sites', 'par', 'loc', 'length', 'gqs',
+                 'gflg', 'gflpr', 'ppp', 'vpene', 'breath', 'fix',
+                 'viqscr', 'p_scor', 's_scor', 'phev_k',
+                 'vvp_svp', 'vaast', 'rprob', 'g_tag', 'p_mod',
+                 's_mod', 'g_tag_scr', 'clinvar', 'var_qual',
+                 'rid', 'loc2', 'maf', 'incndtl', 'payload']
+
+    mim_keys = ['rank', 'mim', 'gene', 'phev_gene', 'phev_mim',
+                'mim_mpr', 'imprm', 'viqscr', 'miqscr', 'inc', 'disease']
+
+    multi_keys = ['rank', 'mim', 'vid', 'num_g', 'type', 'zyg',
+                  'csqs', 'ploidy', 'phev_gene', 'phev_mim', 'mim_mpr',
+                  'viqscr', 'miqscr', 'inc', 'chr', 'name', 'best_mim', 'genes']
+
+    def __init__(self, file=None):
+
+        # Function to create dict autovivification - come on Python, really?
+        def auto_dict():
+            return collections.defaultdict(auto_dict)
+
+        self.file = file
+        self.gene_records = dict()
+        self.mim_records = dict()
+        self.multi_records = dict()
+        self.hpo = list()
+        self.meta = {}
+        self.meta['sv_prior_obs'] = auto_dict()
+        self.meta['ave_depth_of_coverage'] = auto_dict()
+        self.meta['eof'] = False
+        self.parse_file()
+
+    def parse_file(self):
+
+        # Rank CHR Gene Transcript vID CSQ DIST Denovo Type Zygo CSN PLDY
+        # SITES Par Loc Length GQS GFLG GFLpr PPP vPene breath FIX vIQscr
+        # p_scor s_scor PHEV/K VVP/SVP VAAST RPROB G_tag p_mod s_mod
+        # G_tag_scr ClinVar var_qual vID CHR;BEG;END
+
+        GeneRecord =collections.namedtuple('GeneRecord',
+                                ' '.join(VIQ.gene_keys))
+
+        MimRecord =collections.namedtuple('MimRecord',
+                                ' '.join(VIQ.mim_keys))
+
+        MultiRecord =collections.namedtuple('MultiRecord',
+                                ' '.join(VIQ.multi_keys))
+
+        with open(self.file, "r") as fh:
+            for line in fh:
+                line = line.strip()
+
+                if re.search('^\#\#', line):
+                    pass
+                if re.search('#A\tRank\tCHR\tGene', line):
+                    pass
+                elif re.match("#A", line):
+                    a_values = [x.strip() for x in line.split('\t')]
+                    # Get rid of the leading #A column
+                    a_values.pop(0)
+                    col_count = len(a_values)
+                    if (col_count != 38 & col_count != 39):
+                        sys.exit('FATAL : incorrect_column_count_section_A, (expected 38 ' +
+                                 f'or 39, but got {col_count} columns) {line}')
+
+                    gene = a_values[2]
+
+                    rec_dict = dict(zip(VIQ.gene_keys, a_values[0:38]))
+
+                    if col_count == 39:
+                        rec_dict['payload'] = a_values[38]
+                    else:
+                        rec_dict['payload'] = None
+
+                    # Parse denovo
+                    (rec_dict['denovo'], rec_dict['maf']) = rec_dict['denovo'].split('(')
+                    rec_dict['maf'] = re.sub('\)$', '', rec_dict['maf'])
+
+                    # Parse indendental
+                    rec_dict['incndtl'] = None
+                    imatch = re.search('[gpn]$', rec_dict['clinvar'])
+                    if imatch:
+                        rec_dict['clinvar'] = re.sub('([gpn])$', '', rec_dict['clinvar'])
+                        rec_dict['incndtl'] = imatch.group(1)
+
+                    # Parse var_qual
+                    rec_dict['var_qual'] = re.sub('^\(', '', rec_dict['var_qual'])
+                    vq_data = []
+                    vq_dict = dict()
+                    if re.search('\s', rec_dict['var_qual']):
+                        vq_data = rec_dict['var_qual'].split()
+                        vq_dict['type'] = 'sv'
+                        vq_dict['values'] = vq_data.pop(0)
+                        for vq_pair in vq_data:
+                            (key, value) = vq_pair.split(':')
+                            vq_dict[key] = value
+                    else:
+                        vq_data = rec_dict['var_qual'].split('|')
+                        vq_data[0] = vq_data[0].split(':')
+                        vq_dict['type'] = 'snv'
+                        vq_dict['values'] = vq_data
+
+                    rec_dict['var_qual'] = vq_dict
+
+                    # Parse g_tag_scr: '0.5;0.5'
+                    rec_dict['g_tag_scr'] = rec_dict['g_tag_scr'].split(';')
+
+                    # Parse 'loc2': '20;10616332;10656694'
+                    rec_dict['loc2'] = dict(zip(['chr','start','end'], rec_dict['loc2'].split(';')))
+
+                    # Parse 'pldy': '1(0.90195 0.92688)'
+                    (my_pldy, the_rest) = rec_dict['pldy'].split('(')
+                    the_rest = re.sub('\)', '', the_rest)
+                    pldy_values = the_rest.split()
+                    rec_dict['pldy'] = dict([('pldy', my_pldy), ('values', pldy_values)]) 
+                    
+                    record = GeneRecord(**rec_dict)
+                    self.gene_records[gene] = record
+
+                elif re.match("#B", line):
+                    ##------------------------------------------------------------------------------
+                    ##------------------------ POSSIBLE MENDELIAN DIAGNOSES ------------------------
+                    ##------------------------------------------------------------------------------
+                    ## RANK  MIM     GENE     PHEV_GENE PHEV_MIM  MIM_MPR IMPRM   vIQscr  mIQscr  INC  DISEASE
+                    #B 0     118450  JAG1     0.957     0.992     0.987   0.5     1.126   1.545   N    AWS
+                    #B 1     618786  SUZ12    0.952     0.904     0.9     0.5     1.21    0.945   N    Imagawa-Matsumoto syndrome
+                    #B 2     617140  SON      0.953     0.979     0.975   0.5     -0.445  0.212   N    ZTTK SYNDROME
+                    #B 3     617159  CHD4     0.878     0.836     0.832   0.5     0.225   0.055   N    SIFRIM-HITZ-WEISS SYNDROME
+
+                    b_values = [x.strip() for x in line.split('\t')]
+                    # Get rid of the leading #B column
+                    b_values.pop(0)
+                    col_count = len(b_values)
+                    if col_count != 11:
+                        sys.exit('FATAL : incorrect_column_count_section_B, (expected 11 ' +
+                                 f', but got {col_count} columns) {line}')
+
+                    gene = b_values[2]
+
+                    rec_dict = dict(zip(VIQ.mim_keys, b_values))
+
+                    record = MimRecord(**rec_dict)
+                    self.mim_records[gene] = record
+
+                elif re.match("#C", line):
+                    ##------------------------------------------------------------------------------
+                    ##------------------------ POSSIBLE MULTIGENIC DIAGNOSES -----------------------
+                    ##------------------------------------------------------------------------------
+                    ##  RANK  MIM     VID              NUM_G  TYPE  ZYG  CSQS  PLOIDY  PHEV_GENE  PHEV_MIM  MIM_MPR vIQscr  mIQscr  INC  CHR
+                    #C  0     113100  BadgeGrp37362.2  2      4     1    1     1       0.925      0.662     0.66    -1.291  -1.319  N    20
+                    #C  1     NO_MIM  BadgeGrp7940.2   2      4     1    1     1       0.247      0.012     0.002   -1.612  -3.12   Y    16
+                    #C  2     NO_MIM  BadgeGrp6437.2   2      4     1    1     1       0.297      0.001     0.002   -1.722  -3.199  Y    2
+                    #C  3     NO_MIM  BadgeGrp2507.3   3      6     1    8     3       0.264      0         0.002   -1.968  -3.375  Y    7
+                    c_values = [x.strip() for x in line.split('\t')]
+                    # Get rid of the leading #B column
+                    c_values.pop(0)
+                    col_count = len(c_values)
+                    if col_count != 18:
+                        sys.exit('FATAL : incorrect_column_count_section_C, (expected 18 ' +
+                                 f', but got {col_count} columns) {line}')
+
+                    vid = c_values[2]
+
+                    rec_dict = dict(zip(VIQ.multi_keys, c_values))
+
+                    record = MultiRecord(**rec_dict)
+                    self.multi_records[vid] = record
+
+                ##  0  HP:0011121  1
+                elif re.search("^##\s+\d+\s+HP:\d+", line):
+                    m = re.search("^##\s+\d+\s+(HP:\d+)", line)
+                    self.hpo.append(m.group(1))
+
+                # elif re.search("^XXX", line):
+                # pass
+                # 	     ## GENOTYPE SKEW CHECK. P_value alpha = 0.00217391 based upon 90 previous observations.
+                # 	     ## CHR  	NUM_HET 	NUM_HOM 	%HOM_OBS	%HOM_EXP	P_VALUE      	 het <- SKEW -> hom
+                # 	     ## 1    	989     	475     	0.307122	0.274696	0.107468	          |
+                # 	     ## 10   	279     	172     	0.307092	0.291090	0.317974	          |
+                # 	     ## 11   	460     	360     	0.361816	0.301593	0.103433	          |
+                # 	     ## 12   	397     	256     	0.258878	0.303959	0.089466	          |
+                # 	     ## 13   	154     	83      	0.223900	0.263517	0.209185	          |
+                # 	     ## 14   	221     	136     	0.257753	0.303610	0.190588	          |
+                # 	     ## 15   	269     	148     	0.242351	0.311576	0.071857	          |
+                # 	     ## 16   	245     	174     	0.383414	0.260717	0.000274	          |+++
+                # 	     ## 17   	451     	273     	0.268743	0.297246	0.197559	          |
+                # 	     ## 18   	101     	96      	0.381859	0.293539	0.043265	          |
+                # 	     ## 19   	672     	386     	0.287421	0.292273	0.439947	          |
+                # 	     ## 2    	511     	320     	0.327274	0.293646	0.116324	          |
+                # 	     ## 20   	212     	89      	0.233125	0.289368	0.104478	          |
+                # 	     ## 21   	134     	43      	0.137459	0.288819	0.003829	          |
+                # 	     ## 22   	171     	93      	0.260173	0.306226	0.184831	          |
+                # 	     ## 3    	407     	255     	0.283468	0.297334	0.353994	          |
+                # 	     ## 4    	277     	232     	0.444243	0.307158	0.000250	          |+++
+                # 	     ## 5    	310     	225     	0.349154	0.303541	0.128416	          |
+                # 	     ## 6    	644     	323     	0.254281	0.281636	0.317448	          |
+                # 	     ## 7    	433     	173     	0.199651	0.280076	0.019431	          |
+                # 	     ## 8    	227     	152     	0.290023	0.295137	0.446953	          |
+                # 	     ## 9    	263     	184     	0.295424	0.292450	0.468794	          |
+                # 	     ## X    	20      	126     	0.872348	0.647167	0.223214	          |
+                # 	     ##
+
+                ## LOH DETECTED:YES
+                elif re.match("## LOH DETECTED", line):
+                    m = re.search("^## LOH DETECTED:(.*)", line)
+                    self.meta['loh_detected'] = m.group(1)
+
+                ## SKEW DETECTED:YES (7.16236527310748)
+                elif re.match("^## SKEW DETECTED:", line):
+                    m = re.search("^## SKEW DETECTED:(\S+)\s+(\(.*\))", line)
+                    self.meta['skew_detected'] = m.group(1)
+                    self.meta['skew'] = m.group(2)
+
+                ## Parental relationships MSUM:1 FSUM:1 FMR:1 DSUM:778 DSR:389
+                elif re.match("## Parental relationships MSUM", line):
+                    m = re.search("^## Parental relationships (MSUM:(\d+)\s+FSUM:(\d+)\s+FMR:(\S+)\s+DSUM:(\d+)\s+DSR:(\d+))", line)
+                    self.meta['parental_relationships'] = m.group(1)
+                    self.meta['pr_msum'] = m.group(2)
+                    self.meta['pr_fsum'] = m.group(3)
+                    self.meta['pr_fmr']  = m.group(4)
+                    self.meta['pr_dsum'] = m.group(5)
+                    self.meta['pr_dsr']  = m.group(6)
+
+                ## Estimated Consanguinity RAW:5.57 % Ancestry ADJ:0 %
+                elif re.match("## Estimated Consanguinity", line):
+                    m = re.search("^## Estimated Consanguinity\s+(RAW:(.*?)\s+%\s+Ancestry\s+ADJ:(.*?)\s+%)", line)
+                    self.meta['estimated_consanguinity'] = m.group(1)
+                    self.meta['ec_raw'] = m.group(2)
+                    self.meta['ec_adj'] = m.group(3)
+
+                ## CSN PRIOR:0.5
+                elif re.match("## CSN PRIOR", line):
+                    m = re.search("^## CSN PRIOR:(.*)", line)
+                    self.meta['csn_prior'] = m.group(1)
+
+                ## VARIANTS_IN:14993 NUMBER OF SVs (rows):1754 PASSING_FILTERS:2307 p_obs:0.5
+                elif re.match("## VARIANTS_IN", line):
+                    m = re.search("^## VARIANTS_IN:((\d+)\s+NUMBER\s+OF\s+SVs\s+\(rows\):(\d+)\s+PASSING_FILTERS:(\d+)\s+p_obs:(.+))", line)
+                    self.meta['variants_in'] = m.group(1)
+                    self.meta['vars_snv'] = m.group(2)
+                    self.meta['vars_sv'] = m.group(3)
+                    self.meta['vars_passing'] = m.group(4)
+                    self.meta['vars_p_obs'] = m.group(5)
+
+                ## Ext. SVs in file:1657
+                elif re.match("## Ext. SVs in file", line):
+                    m = re.search("^## Ext. SVs in file:(\d+)", line)
+                    self.meta['ext_svs'] = m.group(1)
+
+                ## Ext. SVs in kept:0
+                elif re.match("## Ext. SVs in kept", line):
+                    m = re.search("^## Ext. SVs in kept:(\d+)", line)
+                    self.meta['ext_svs_kept'] = m.group(1)
+
+                ## Badges trimmed:0
+                elif re.match("## Badges trimmed", line):
+                    m = re.search("^## Badges trimmed:(\d+)", line)
+                    self.meta['badges_trimmed'] = m.group(1)
+
+                ## Badges considered:29788
+                elif re.match("## Badges considered", line):
+                    m = re.search("^## Badges considered:(\d+)", line)
+                    self.meta['badges_considered'] = m.group(1)
+
+                ## Badges kept:5
+                elif re.match("## Badges kept", line):
+                    m = re.search("^## Badges kept:(\d+)", line)
+                    self.meta['badges_kept'] = m.group(1)
+
+                ## Badges deleted:1
+                elif re.match("## Badges deleted", line):
+                    m = re.search("^## Badges deleted:(\d+)", line)
+                    self.meta['badges_deleted'] = m.group(1)
+
+                ## Proband Ancestry:Other
+                ## Relative -Log Likelihoods:
+                ## Other:10355,European(non-Finish):11019,Finish:11021,Ashkenazi:11079,Asian:11373,African:12613
+                elif re.match("## Proband Ancestry", line):
+                    m = re.search("^## Proband Ancestry:(.*?)\s+Relative\s+-Log\s+Likelihoods:\s+(.*)", line)
+                    self.meta['proband_ancestry'] = m.group(1)
+                    pa_rrl_txt = m.group(2)
+                    pa_rll_list = pa_rrl_txt.split(',')
+                    pa_rll_dict = dict()
+                    for pa_rll in pa_rll_list:
+                        (ans, rll) = pa_rll.split(':')
+                        pa_rll_dict[ans] = rll
+                    self.meta['pa_rlls'] = pa_rll_dict
+
+                ## Proband Sex:f P(MALE):0.322425452976684
+                elif re.match("## Proband Sex", line):
+                    m = re.search("^## Proband Sex:([fm])\s+P\(MALE\):(.*)", line)
+                    self.meta['proband_sex'] = m.group(1)
+                    self.meta['ps_prob_male'] = m.group(2)
+
+                ## NUM HPO TERMS:3
+                elif re.match("## NUM HPO TERMS", line):
+                    m = re.search("^## NUM HPO TERMS:(\d+)", line)
+                    self.meta['hpo_term_count'] = m.group(1)
+
+                ## ADJ FOR INBREEDING:0.541174032480132
+                elif re.match("## ADJ FOR INBREEDING", line):
+                    m = re.search("^## ADJ FOR INBREEDING:(.*)", line)
+                    self.meta['adj_for_inbreeding'] = m.group(1)
+
+                ## MODE:SINGLETON
+                elif re.match("## MODE", line):
+                    m = re.search("^## MODE:(.*)", line)
+                    self.meta['mode'] = m.group(1)
+
+                ## Number of variants failing -e m  a:cov:120,bias:171,tot:248 x:cov:5,bias:9,tot:14
+                elif re.match("## Number of variants failing -e m", line):
+                    m = re.search("^## Number of variants failing -e m  (.*)", line)
+                    self.meta['num_vars_failing_em'] = m.group(1)
+                    data = self.meta['num_vars_failing_em'].split()
+                    this_type = ''
+                    for item in data:
+                        m = re.match('^([ax]):', item)
+                        this_type = m.group(1)
+                        
+                        item = re.sub('^[ax]:', '', item)
+
+                        nvf_dict = dict()
+                        for e in item.split(','):
+                            (key, value) = e.split(':')
+                            nvf_dict[key] = value
+                            self.meta['nvf_' + this_type] = nvf_dict
+
+                ## VAAST-VVP COOR:0.51
+                elif re.match("## VAAST-VVP COOR", line):
+                    m = re.search("^## VAAST-VVP COOR:(.*)", line)
+                    self.meta['vaast_vvp_coor'] = m.group(1)
+
+                ## BLS-BND COOR:0.0049079754601227
+                elif re.match("## BLS-BND COOR", line):
+                    m = re.search("^## BLS-BND COOR:(.*)", line)
+                    self.meta['bls_bnd_coor'] = m.group(1)
+
+                ## BLS-NOA COOR:0.0049079754601227
+                elif re.match("## BLS-NOA COOR", line):
+                    m = re.search("^## BLS-NOA COOR:(.*)", line)
+                    self.meta['bls_noa_coor'] = m.group(1)
+
+                ## PHEV-KPR COOR:0.34
+                elif re.match("## PHEV-KPR COOR", line):
+                    m = re.search("^## PHEV-KPR COOR:(.*)", line)
+                    self.meta['phev_kpr_coor'] = m.group(1)
+
+                ## CLIN-VVP-VAAST:0.725758988640042
+                elif re.match("## CLIN-VVP-VAAST", line):
+                    m = re.search("^## CLIN-VVP-VAAST:(.*)", line)
+                    self.meta['clin_vvp_vaast'] = m.group(1)
+
+                ## COVERAGE-HOMOZYGOSITY JACC:0
+                elif re.match("## COVERAGE-HOMOZYGOSITY JACC", line):
+                    m = re.search("^## COVERAGE-HOMOZYGOSITY JACC:(.*)", line)
+                    self.meta['coverage_homozygosity_jacc'] = m.group(1)
+
+                ## COVERAGE-HETEROZYGOSITY JACC:0.04
+                elif re.match("## COVERAGE-HETEROZYGOSITY JACC", line):
+                    m = re.search("^## COVERAGE-HETEROZYGOSITY JACC:(.*)", line)
+                    self.meta['coverage_heterozygosity_jacc'] = m.group(1)
+
+                ## PHEV-GENE-MIM COOR:0.42
+                elif re.match("## PHEV-GENE-MIM COOR", line):
+                    m = re.search("^## PHEV-GENE-MIM COOR:(.*)", line)
+                    self.meta['phev_gene_mim_coor'] = m.group(1)
+
+                ## K_PRIOR:0.8344
+                elif re.match("## K_PRIOR:", line):
+                    m = re.search("^## K_PRIOR:(.*)", line)
+                    self.meta['k_prior'] = m.group(1)
+
+                ## MIM-GEN SCORES COOR:0.08
+                elif re.match("## MIM-GEN SCORES COOR", line):
+                    m = re.search("^## MIM-GEN SCORES COOR:(.*)", line)
+                    self.meta['mim_gen_scores_coor'] = m.group(1)
+
+                ## K_PRIOR_PROB:0.232164449818622
+                elif re.match("## K_PRIOR_PROB", line):
+                    m = re.search("^## K_PRIOR_PROB:(.*)", line)
+                    self.meta['k_prior_prob'] = m.group(1)
+
+                ## U_PRIOR_PROB:0.405990586221652
+                elif re.match("## U_PRIOR_PROB", line):
+                    m = re.search("^## U_PRIOR_PROB:(.*)", line)
+                    self.meta['u_prior_prob'] = m.group(1)
+
+                # SV PRIOR OBS	a	f	1	80
+                elif re.match("# SV PRIOR OBS", line):
+                    m = re.search("^# SV PRIOR OBS\s+([ax])\s+([fm])\s+(\d+)\s+(\d+)", line)
+
+                    if 'sv_prior_obs' not in self.meta:
+                        self.meta['sv_prior_obs'] = {}
+                    chrom = m.group(1)
+                    sex = m.group(2)
+
+                    self.meta['sv_prior_obs'][chrom][sex]['_first'] = m.group(3)
+                    self.meta['sv_prior_obs'][chrom][sex]['_second'] = m.group(4)
+
+                ## AVE DEPTH OF COVERAGE 1 MEAN:38.2462006079027 VARIANCE:266.838590703536
+                elif re.match("## AVE DEPTH OF COVERAGE", line):
+                    m = re.search("^## AVE DEPTH OF COVERAGE\s+(\S+)\s+MEAN:(\S+)\s+VARIANCE:(\S+)", line)
+                    chrom = m.group(1)
+                    mean = m.group(2)
+                    var = m.group(3)
+
+                    self.meta['ave_depth_of_coverage'][chrom]['mean'] = mean
+                    self.meta['ave_depth_of_coverage'][chrom]['variance'] = var
+
+                ## CLIN PRIORS
+                ##	0	0.00502478219010376
+                ##	1	0.00503303631683697
+                ##	2	0.00504954457030337
+                ##	3	0.00508256107723618
+                ##	5	0.994983471936629
+                ##	4	0.994983471936629
+                ##	9	0.994983471936629
+                ##	6	0.994983471936629
+                ##	8	0.994983471936629
+                ##
+                ## CSQS
+                ##	12,33	3.35638047929113e-05
+                ##	3,23	3.35638047929113e-05
+                ##	4,5	3.35638047929113e-05
+                ##	5,13	3.35638047929113e-05
+                ##	7	3.35638047929113e-05
+                ##	2	0.000100691414378734
+                ##	13,20	0.000134255219171645
+                ##	1	0.000234946633550379
+                ##	3	0.000234946633550379
+                ##	11,13	0.000268510438343291
+                ##	13,17	0.000302074243136202
+                ##	4	0.000302074243136202
+                ##	10	0.00050345707189367
+                ##	9	0.000704839900651138
+                ##	12,35	0.000738403705444049
+                ##	5	0.00104047794858025
+                ##	13,23	0.00288648721219037
+                ##	11	0.0192320601463382
+                ##
+
+                ## TYPE FREQUENCIES:	1:0.862332695984704	2:0.137667304015296	SUM:523
+                elif re.match("## TYPE FREQUENCIES", line):
+                    m = re.search("^## TYPE FREQUENCIES:\s+(.*)\s+SUM:(\d+)", line)
+
+                    if 'type_frequencies' not in self.meta:
+                        self.meta['type_frequencies'] = {}
+                    type_txt = m.group(1)
+                    for my_type in type_txt.split():
+                        (k, v) = my_type.split(':')
+                        self.meta['type_frequencies'][k] = v
+
+                    self.meta['type_frequencies']['sum'] = m.group(2)
+
+                ## TFA (INDEL) ADJUSTMENT	STATUS:on	TFA:0.389454872134458	Pval:0.000211756350740666	exp freq:0.0878152942746563
+                elif re.match("## TFA \(INDEL\) ADJUSTMENT", line):
+                    m = re.search("^## TFA \(INDEL\) ADJUSTMENT\s+(STATUS:(\S+)\s+TFA:(\S+)\s+Pval:(\S+)\s+exp\s+freq:(\S+))", line)
+                    self.meta['tfa_adjustment'] = m.group(1)
+                    self.meta['tfa_status'] = m.group(2)
+                    self.meta['tfa_tfa'] = m.group(3)
+                    self.meta['tfa_pval'] = m.group(4)
+                    self.meta['tfa_exp_freq'] = m.group(5)
+
+                ## LOW QUALITY LIST FILE DETECTED:NO. Frac Vars w/out reads:0
+                elif re.match("## LOW QUALITY LIST FILE DETECTED", line):
+                    m = re.search("^## LOW QUALITY LIST FILE DETECTED:(\S+)\s+Frac Vars w/out reads:(\S+)", line)
+                    self.meta['low_quality_list_file'] = m.group(1)
+                    self.meta['low_quality_list_file_frac'] = m.group(2)
+
+                ## NULL READ COUNT ADJ. With:1 Without:1
+                elif re.match("## NULL READ COUNT ADJ\.", line):
+                    m = re.search("^## NULL READ COUNT ADJ\.\s+With:(\S+)\s+Without:(\S+)", line)
+                    self.meta['null_read_count_adj_with'] = m.group(1)
+                    self.meta['null_read_count_adj_without'] = m.group(2)
+
+                ## CMD:/home/ubuntu/vIQ/bin/vIQ2stripe -a /home/ubuntu/fabric_viq_workflow/snakemake/rady_benchmarks/viq.config -b 0.95 -B viq_ontos/bad.txt -c  -d  -T WGS -e m -f 0.005 -g  -H  -h  -k  -l VIQ/coding_dist.CT.CS4EBE.viq_list.txt -m s -M Phevor/phv_renorm_mim.CT.CS4EBE.txt -o  -p 0.5 -Q m -q n -r n -s Phevor/phv_renorm.CT.CS4EBE.txt -v  -w  -x  -y  -z
+                elif re.match("## CMD:", line):
+                    m = re.search("^## CMD:(.*)", line)
+                    self.meta['cmd'] = m.group(1)
+
+                ## Threshold for SV support (BFT):0.698970004336019
+                elif re.match("## Threshold for SV support \(BFT\)", line):
+                    m = re.search("^## Threshold for SV support \(BFT\):(\S+)", line)
+                    self.meta['threshold_sv_support'] = m.group(1)
+
+                ## K:6.51329346539193
+                elif re.match("## K:", line):
+                    m = re.search("^## K:(\S+)", line)
+                    self.meta['k'] = m.group(1)
+
+                ## BEE:0
+                elif re.match("## BEE:", line):
+                    m = re.search("^## BEE:(.*)", line)
+                    self.meta['bee'] = m.group(1)
+
+                ## VERSION:7.0.02
+                elif re.match("## VERSION:", line):
+                    m = re.search("^## VERSION:(\S+)", line)
+                    self.meta['version'] = m.group(1)
+
+                ## GMT:Tue Jun 21 22:32:36 2022
+                elif re.match("## GMT:", line):
+                    m = re.search("^## GMT:(.*)", line)
+                    self.meta['gmt'] = m.group(1)
+
+                ## EOF
+                elif re.match("## EOF", line):
+                    m = re.search("^## EOF", line)
+                    self.meta['eof'] = True
+
+    def genes_as_list(self):
+        df = self.genes_as_df()
+        return df.values.tolist()
     
-    # Rank CHR Gene Transcript vID CSQ DIST Denovo Type Zygo CSN PLDY
-    # SITES Par Loc Length GQS GFLG GFLpr PPP vPene breath FIX vIQscr
-    # p_scor s_scor PHEV/K VVP/SVP VAAST RPROB G_tag p_mod s_mod
-    # G_tag_scr ClinVar var_qual vID CHR;BEG;END
-
-    @record{qw(section rank chr gene transcript vid csq dist denovo type zygo
-               csn pldy sites par loc length gqs gflg gflpr ppp vpene
-               breath fix viqscr p_scor s_scor phev_k vvp_svp vaast
-               rprob g_tag p_mod s_mod g_tag_scr clinvar var_qual
-               rid loc)} = @cols;
-
-    # Parse denovo
-    ($record{denovo}, $record{maf}) = split /\(/, $record{denovo};
-    $record{maf} =~ s/\)$//;
-
-    # Parse indendental
-    $record{incendental} = 0;
-    if ($record{clinvar} =~ /\*/) {
-        $record{incendental}++
-    }
+    def genes_as_json(self):
+        return json.dumps(self.gene_records, indent=4, sort_keys=True)
     
-    # Parse var_qual
-    # 24:14|0.5|0.1197 - SNV/Indel
-    # (83|54|0.00068|25) 8/15.3946097|25.0000|0.50000|14.0113 - Badges/SVs
-    # my ($bayesf, $prob);
-    # my %var_qual_hash;
-    # @var_qual_hash{qw(ad bayesf prob)} = split /\|/, $record{var_qual};
-    # $record{var_qual} = \%var_qual_hash;
-    # $record{var_qual}{ad} = [split /:/, $record{var_qual}{ad}];
+    def genes_as_df(self):
 
-    return wantarray ? %record : \%record;
-}
+        genes = []
+        for record in self.gene_records.values():
+            gene = []
+            for k in VIQ.gene_keys:
+                v = getattr(record, k)
+
+                # gene_keys = ['rank', 'chr', 'gene', 'transcript', 'vid',
+                #              'csq', 'dist', 'denovo', 'type', 'zygo', 'csn',
+                #              'pldy', 'sites', 'par', 'loc', 'length', 'gqs',
+                #              'gflg', 'gflpr', 'ppp', 'vpene', 'breath', 'fix',
+                #              'viqscr', 'p_scor', 's_scor', 'phev_k',
+                #              'vvp_svp', 'vaast', 'rprob', 'g_tag', 'p_mod',
+                #              's_mod', 'g_tag_scr', 'clinvar', 'var_qual',
+                #              'rid', 'loc2', 'maf', 'incndtl', 'payload']
+
+                if k == 'pldy':
+                    v = v['pldy']
+                if k == 'g_tag_scr':
+                    v = ','.join(v)
+                if k == 'var_qual':
+                    v = json.dumps(v)
+                if k == 'loc2':
+                    v = '{0}:{1}-{2}'.format(v['chr'], v['start'], v['end'])
+
+                gene.append(v)
+            genes.append(gene)
+        
+        return pd.DataFrame(data=genes, columns=VIQ.gene_keys)
 
 #-----------------------------------------------------------------------------
 
-=head1 DIAGNOSTICS
+def main():
+    import argparse
 
-L<Arty::vIQ> does not throw any warnings or errors.
+    parser = argparse.ArgumentParser(
+         description=('This python module is intended to be imported, ' +
+                      'however it can be tested by passing a vIQ output ' +
+                      'file, in which case it will print portions of the ' +
+                      'parsed data'),
+         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('file',
+                        help='A vIQ output file')
+    args = parser.parse_args()
 
-=head1 CONFIGURATION AND ENVIRONMENT
+    viq = VIQ(args.file)
+    for record in viq.gene_records.values():
+         print("\t".join([record.gene, record.viqscr, json.dumps(record.var_qual)]))
 
-L<Arty::vIQ> requires no configuration files or environment variables.
+    for record in viq.mim_records.values():
+         print("\t".join([record.gene, record.miqscr, record.disease]))
 
-=head1 DEPENDENCIES
+    for record in viq.multi_records.values():
+        print("\t".join([record.phev_gene, record.mim, record.viqscr, record.miqscr]))
 
-L<Arty::Base>
+    ## LOH DETECTED:NO
+    print('loh_detected: {}'.format(viq.meta['loh_detected']))
 
-=head1 INCOMPATIBILITIES
+    ## SKEW DETECTED:NO (0)
+    print('skew_detected: {}'.format(viq.meta['skew_detected']))
 
-None reported.
+    ## Parental relationships MSUM:1 FSUM:1 FMR:1 DSUM:778 DSR:389
+    print('parental_relationships: {}'.format(viq.meta['parental_relationships']))
+    print('pr_msum: {}'.format(viq.meta['pr_msum']))
+    print('pr_fsum: {}'.format(viq.meta['pr_fsum']))
+    print('pr_fmr: {}'.format(viq.meta['pr_fmr']))
+    print('pr_dsum: {}'.format(viq.meta['pr_dsum']))
+    print('pr_dsr: {}'.format(viq.meta['pr_dsr']))
 
-=head1 BUGS AND LIMITATIONS
+    ## SKEW DETECTED:NO (0)
+    print('skew: {}'.format(viq.meta['skew']))
 
-No bugs have been reported.
+    ## Estimated Consanguinity RAW:5.57 % Ancestry ADJ:0 %
+    print('estimated_consanguinity: {}'.format(viq.meta['estimated_consanguinity']))
+    print('ec_raw: {}'.format(viq.meta['ec_raw']))
+    print('ec_adj: {}'.format(viq.meta['ec_adj']))
 
-Please report any bugs or feature requests to:
-barry.moore@genetics.utah.edu
+    ## CSN PRIOR:0.5
+    print('csn_prior: {}'.format(viq.meta['csn_prior']))
 
-=head1 AUTHOR
+    ## VARIANTS_IN:14993 NUMBER OF SVs (rows):1754 PASSING_FILTERS:2307 p_obs:0.5
+    print('variants_in: {}'.format(viq.meta['variants_in']))
+    print('vars_snv: {}'.format(viq.meta['vars_snv']))
+    print('vars_sv: {}'.format(viq.meta['vars_sv']))
+    print('vars_passing: {}'.format(viq.meta['vars_passing']))
+    print('vars_p_obs: {}'.format(viq.meta['vars_p_obs']))
 
-Barry Moore <barry.moore@genetics.utah.edu>
+    ## Ext. SVs in file:1657
+    print('ext_svs: {}'.format(viq.meta['ext_svs']))
 
-=head1 LICENCE AND COPYRIGHT
+    ## Ext. SVs in kept:0
+    print('ext_svs_kept: {}'.format(viq.meta['ext_svs_kept']))
 
-Copyright (c) 2019, Barry Moore <barry.moore@genetics.utah.edu>.
-All rights reserved.
+    ## Badges trimmed:0
+    print('badges_trimmed: {}'.format(viq.meta['badges_trimmed']))
 
-    This module is free software; you can redistribute it and/or
-    modify it under the same terms as Perl itself (See LICENSE).
+    ## Badges considered:29788
+    print('badges_considered: {}'.format(viq.meta['badges_considered']))
 
-=head1 DISCLAIMER OF WARRANTY
+    ## Badges kept:5
+    print('badges_kept: {}'.format(viq.meta['badges_kept']))
 
-BECAUSE THIS SOFTWARE IS LICENSED FREE OF CHARGE, THERE IS NO WARRANTY
-FOR THE SOFTWARE, TO THE EXTENT PERMITTED BY APPLICABLE LAW. EXCEPT
-WHEN OTHERWISE STATED IN WRITING THE COPYRIGHT HOLDERS AND/OR OTHER
-PARTIES PROVIDE THE SOFTWARE "AS IS" WITHOUT WARRANTY OF ANY KIND,
-EITHER EXPRESSED OR IMPLIED, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-PURPOSE. THE ENTIRE RISK AS TO THE QUALITY AND PERFORMANCE OF THE
-SOFTWARE IS WITH YOU. SHOULD THE SOFTWARE PROVE DEFECTIVE, YOU ASSUME
-THE COST OF ALL NECESSARY SERVICING, REPAIR, OR CORRECTION.
+    ## Badges deleted:1
+    print('badges_deleted: {}'.format(viq.meta['badges_deleted']))
 
-IN NO EVENT UNLESS REQUIRED BY APPLICABLE LAW OR AGREED TO IN WRITING
-WILL ANY COPYRIGHT HOLDER, OR ANY OTHER PARTY WHO MAY MODIFY AND/OR
-REDISTRIBUTE THE SOFTWARE AS PERMITTED BY THE ABOVE LICENCE, BE LIABLE
-TO YOU FOR DAMAGES, INCLUDING ANY GENERAL, SPECIAL, INCIDENTAL, OR
-CONSEQUENTIAL DAMAGES ARISING OUT OF THE USE OR INABILITY TO USE THE
-SOFTWARE (INCLUDING BUT NOT LIMITED TO LOSS OF DATA OR DATA BEING
-RENDERED INACCURATE OR LOSSES SUSTAINED BY YOU OR THIRD PARTIES OR A
-FAILURE OF THE SOFTWARE TO OPERATE WITH ANY OTHER SOFTWARE), EVEN IF
-SUCH HOLDER OR OTHER PARTY HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH
-DAMAGES.
+    ## Proband Ancestry:Other	Relative -Log Likelihoods:	Other:10355,European(non-Finish):11019,Finish:11021,Ashkenazi:11079,Asian:11373,African:12613
+    print('proband_ancestry: {}'.format(viq.meta['proband_ancestry']))
+    print('pa_rlls: {}'.format(viq.meta['pa_rlls']))
 
-=cut
+    ## Proband Sex:f P(MALE):0.322425452976684
+    print('proband_sex: {}'.format(viq.meta['proband_sex']))
+    print('ps_prob_male: {}'.format(viq.meta['ps_prob_male']))
 
-1;
+    ## NUM HPO TERMS:3
+    print('hpo_term_count: {}'.format(viq.meta['hpo_term_count']))
+
+    ## ADJ FOR INBREEDING:0.541174032480132
+    print('adj_for_inbreeding: {}'.format(viq.meta['adj_for_inbreeding']))
+
+    ## MODE:SINGLETON
+    print('mode: {}'.format(viq.meta['mode']))
+
+    ## Number of variants failing -e m  a:cov:120,bias:171,tot:248 x:cov:5,bias:9,tot:14
+    print('num_vars_failing: {}'.format(viq.meta['num_vars_failing_em']))
+    print('nvf_a: {}'.format(viq.meta['nvf_a']))
+    print('nvf_x: {}'.format(viq.meta['nvf_x']))
+
+    ## VAAST-VVP COOR:0.51
+    print('vaast_vvp_coor: {}'.format(viq.meta['vaast_vvp_coor']))
+
+    ## BLS-BND COOR:0.0049079754601227
+    print('bls_bnd_coor: {}'.format(viq.meta['bls_bnd_coor']))
+
+    ## BLS-NOA COOR:0.0049079754601227
+    print('bls_nor_coor: {}'.format(viq.meta['bls_noa_coor']))
+
+    ## PHEV-KPR COOR:0.34
+    print('phev_kpr_coor: {}'.format(viq.meta['phev_kpr_coor']))
+
+    ## CLIN-VVP-VAAST:0.725758988640042
+    print('clin_vvp_vaast: {}'.format(viq.meta['clin_vvp_vaast']))
+
+    ## COVERAGE-HOMOZYGOSITY JACC:0
+    print('coverage_homozygosity_jacc: {}'.format(viq.meta['coverage_homozygosity_jacc']))
+
+    ## COVERAGE-HETEROZYGOSITY JACC:0.04
+    print('coverage_heterozygosity_jacc: {}'.format(viq.meta['coverage_heterozygosity_jacc']))
+
+    ## PHEV-GENE-MIM COOR:0.42
+    print('phev_gene_mim_coor: {}'.format(viq.meta['phev_gene_mim_coor']))
+
+    ## K_PRIOR:0.8344
+    print('k_prior: {}'.format(viq.meta['k_prior']))
+
+    ## MIM-GEN SCORES COOR:0.08
+    # print('XXX: {}'.format(viq.meta['xxx']))
+
+    ## K_PRIOR_PROB:0.232164449818622
+    # print('XXX: {}'.format(viq.meta['xxx']))
+
+    ## U_PRIOR_PROB:0.405990586221652
+    # print('XXX: {}'.format(viq.meta['xxx']))
+
+    # SV PRIOR OBS	a	f	1	80
+    print('sv_prior_obs: {}'.format(viq.meta['sv_prior_obs']))
+
+    ## AVE DEPTH OF COVERAGE 1 MEAN:38.2462006079027 VARIANCE:266.838590703536
+    print('ave_depth_of_coverage: {}'.format(viq.meta['ave_depth_of_coverage']))
+
+    ## TYPE FREQUENCIES:	1:0.862332695984704	2:0.137667304015296	SUM:523
+    print('type_frequencies: {}'.format(viq.meta['type_frequencies']))
+
+    ## TFA (INDEL) ADJUSTMENT	STATUS:on	TFA:0.389454872134458	Pval:0.000211756350740666	exp freq:0.0878152942746563
+    print('tfa_adjustment: {}'.format(viq.meta['tfa_adjustment']))
+    print('tfa_status: {}'.format(viq.meta['tfa_status']))
+    print('tfa_tfa: {}'.format(viq.meta['tfa_tfa']))
+    print('tfa_pval: {}'.format(viq.meta['tfa_pval']))
+    print('tfa_exp_freq: {}'.format(viq.meta['tfa_exp_freq']))
+
+    ## LOW QUALITY LIST FILE DETECTED:NO. Frac Vars w/out reads:0
+    print('low_quality_list_file: {}'.format(viq.meta['low_quality_list_file']))
+    print('low_quality_list_file_frac: {}'.format(viq.meta['low_quality_list_file_frac']))
+
+    ## NULL READ COUNT ADJ. With:1 Without:1
+    print('null_read_count_adj_with: {}'.format(viq.meta['null_read_count_adj_with']))
+    print('null_read_count_adj_without: {}'.format(viq.meta['null_read_count_adj_without']))
+    # print('XXX: {}'.format(viq.meta['xxx']))
+
+    ## CMD:/home/ubuntu/vIQ/bin/vIQ2stripe -a /home/ubuntu/fabric_viq_workflow/snakemake/rady_benchmarks/viq.config -b 0.95 -B viq_ontos/bad.txt -c  -d  -T WGS -e m -f 0.005 -g  -H  -h  -k  -l VIQ/coding_dist.CT.CS4EBE.viq_list.txt -m s -M Phevor/phv_renorm_mim.CT.CS4EBE.txt -o  -p 0.5 -Q m -q n -r n -s Phevor/phv_renorm.CT.CS4EBE.txt -v  -w  -x  -y  -z
+    print('cmd: {}'.format(viq.meta['cmd']))
+
+    ## Threshold for SV support (BFT):0.698970004336019
+    print('threshold_sv_support: {}'.format(viq.meta['threshold_sv_support']))
+
+    ## K:6.51329346539193
+    print('k: {}'.format(viq.meta['k']))
+
+    ## BEE:0
+    print('bee: {}'.format(viq.meta['bee']))
+
+    ## VERSION:7.0.02
+    print('version: {}'.format(viq.meta['version']))
+
+    ## GMT:Tue Jun 21 22:32:36 2022
+    print('gmt: {}'.format(viq.meta['gmt']))
+
+    ## EOF
+    print('eof: {}'.format(viq.meta['eof']))
+
+    # print(viq.genes_as_list())
+    
+if __name__ == "__main__":
+    main()
+

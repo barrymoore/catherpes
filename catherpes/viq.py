@@ -42,6 +42,32 @@ class VIQ():
                   'csqs', 'ploidy', 'phev_gene', 'phev_mim', 'mim_mpr',
                   'viqscr', 'miqscr', 'inc', 'chr', 'name', 'best_mim', 'genes']
 
+    meta_keys = ['loh_detected', 'skew_detected', 'skew',
+                 'parental_relationships', 'pr_msum', 'pr_fsum',
+                 'pr_fmr', 'pr_dsum', 'pr_dsr',
+                 'estimated_consanguinity', 'ec_raw', 'ec_adj',
+                 'csn_prior', 'variants_in', 'vars_snv', 'vars_sv',
+                 'vars_passing', 'vars_p_obs', 'ext_svs',
+                 'ext_svs_kept', 'badges_trimmed',
+                 'badges_considered', 'badges_kept', 'badges_deleted',
+                 'proband_ancestry', 'pa_rlls', 'proband_sex',
+                 'ps_prob_male', 'hpo_term_count',
+                 'adj_for_inbreeding', 'mode', 'num_vars_failing_em',
+                 'num_vars_failing_em', 'nvf_a', 'nvf_x',
+                 'vaast_vvp_coor', 'bls_bnd_coor', 'bls_noa_coor',
+                 'phev_kpr_coor', 'clin_vvp_vaast',
+                 'coverage_homozygosity_jacc',
+                 'coverage_heterozygosity_jacc', 'phev_gene_mim_coor',
+                 'k_prior', 'mim_gen_scores_coor', 'k_prior_prob',
+                 'u_prior_prob', 'sv_prior_obs', 'type_frequencies',
+                 'tfa_adjustment', 'tfa_status', 'tfa_tfa',
+                 'tfa_pval', 'tfa_exp_freq', 'low_quality_list_file',
+                 'low_quality_list_file_frac',
+                 'null_read_count_adj_with',
+                 'null_read_count_adj_without', 'cmd',
+                 'threshold_sv_support', 'k', 'bee', 'version', 'gmt',
+                 'eof']
+
     def __init__(self, file=None):
 
         # Function to create dict autovivification - come on Python, really?
@@ -107,7 +133,7 @@ class VIQ():
 
                     # Parse indendental
                     rec_dict['incndtl'] = None
-                    imatch = re.search('[gpn]$', rec_dict['clinvar'])
+                    imatch = re.search('([gpn])$', rec_dict['clinvar'])
                     if imatch:
                         rec_dict['clinvar'] = re.sub('([gpn])$', '', rec_dict['clinvar'])
                         rec_dict['incndtl'] = imatch.group(1)
@@ -537,10 +563,6 @@ class VIQ():
                     m = re.search("^## EOF", line)
                     self.meta['eof'] = True
 
-    def genes_as_list(self):
-        df = self.genes_as_df()
-        return df.values.tolist()
-    
     def genes_as_json(self):
         return json.dumps(self.gene_records, indent=4, sort_keys=True)
     
@@ -569,12 +591,64 @@ class VIQ():
                     v = json.dumps(v)
                 if k == 'loc2':
                     v = '{0}:{1}-{2}'.format(v['chr'], v['start'], v['end'])
-
                 gene.append(v)
             genes.append(gene)
         
         return pd.DataFrame(data=genes, columns=VIQ.gene_keys)
 
+    def genes_as_list(self):
+        df = self.genes_as_df()
+        return df.values.tolist()
+    
+    def meta_as_json(self):
+        return json.dumps(self.meta, indent=4, sort_keys=True)
+    
+    def meta_as_df(self):
+
+
+        # Ignore problematic data types
+        my_meta_keys = list(VIQ.meta_keys)
+        if 'sv_prior_obs' in my_meta_keys:
+            my_meta_keys = my_meta_keys .remove('sv_prior_obs')
+        if 'ave_depth_of_coverage' in my_meta_keys:
+            my_meta_keys.remove('ave_depth_of_coverage')
+        if 'type_frequencies' in my_meta_keys:
+            my_meta_keys.remove('type_frequencies')
+        
+        metas = []
+        for record in self.meta_records.values():
+            meta = []
+            for k in VIQ.meta_keys:
+                v = getattr(record, k)
+
+                # Clean up problematic data types
+                # if k == 'sv_prior_obs':
+                #     # [chrom][sex]['_first'] = m.group(3)
+                #     k = None
+                # elif k == 'sv_prior_obs':
+                #     # [chrom][sex]['_second'] = m.group(4)
+                #     k = None
+                # elif k == 'ave_depth_of_coverage':
+                #     # [chrom]['mean'] = mean
+                #     k = None
+                # elif k == 'ave_depth_of_coverage':
+                #     # [chrom]['variance'] = var
+                #     k = None
+                # elif k == 'type_frequencies':
+                #     # [k] = v
+                #     k = None
+                # elif k == 'type_frequencies':
+                #     # 'sum',
+                #     k = None
+                meta.append(v)
+            metas.append(meta)
+        
+        return pd.DataFrame(data=metas, columns=VIQ.meta_keys)
+
+    def meta_as_list(self):
+        df = self.meta_as_df()
+        return df.values.tolist()
+    
 #-----------------------------------------------------------------------------
 
 def main():
@@ -755,6 +829,8 @@ def main():
     print('eof: {}'.format(viq.meta['eof']))
 
     # print(viq.genes_as_list())
+
+    print(viq.meta_as_json())
     
 if __name__ == "__main__":
     main()

@@ -1,0 +1,10 @@
+HG00096	/home/ubuntu/Projects/22-04-19_1KG_VIQ/VIQ/viq.HG00096.output.txt
+HG00103	/home/ubuntu/Projects/22-04-19_1KG_VIQ/VIQ/viq.HG00103.output.txt
+HG00105	/home/ubuntu/Projects/22-04-19_1KG_VIQ/VIQ/viq.HG00105.output.txt
+HG00106	/home/ubuntu/Projects/22-04-19_1KG_VIQ/VIQ/viq.HG00106.output.txt
+HG00107	/home/ubuntu/Projects/22-04-19_1KG_VIQ/VIQ/viq.HG00107.output.txt
+HG00108	/home/ubuntu/Projects/22-04-19_1KG_VIQ/VIQ/viq.HG00108.output.txt
+HG00110	/home/ubuntu/Projects/22-04-19_1KG_VIQ/VIQ/viq.HG00110.output.txt
+HG00111	/home/ubuntu/Projects/22-04-19_1KG_VIQ/VIQ/viq.HG00111.output.txt
+HG00112	/home/ubuntu/Projects/22-04-19_1KG_VIQ/VIQ/viq.HG00112.output.txt
+HG00113	/home/ubuntu/Projects/22-04-19_1KG_VIQ/VIQ/viq.HG00113.output.txt
